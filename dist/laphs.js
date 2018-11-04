@@ -52,10 +52,10 @@ return /******/ (function(modules) { // webpackBootstrap
 /************************************************************************/
 /******/ ([
 /* 0 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ (function(module, exports, __webpack_require__) {
 
 	var LivePhoto = __webpack_require__(1);
-	var styles = __webpack_require__(4);
+	var styles = __webpack_require__(2);
 
 	var supportsLivePhotos = true;
 	var stylesInUse = 0;
@@ -174,11 +174,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = LivePhotos;
 
 
-/***/ },
+/***/ }),
 /* 1 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ (function(module, exports) {
 
-	var enableInlineVideo = __webpack_require__(2);
 	var touchEnabled = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints);
 
 	/**
@@ -197,12 +196,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var video = document.createElement('video');
 	    video.src = src + (time ? '#' + time : '');
 	    video.controls = false;
+	    video.setAttribute('playsinline', 'playsinline');
+	    video.playsInline = true;
 	    video.muted = muted || false;
 	    video.preload = 'auto';
 	    if (className) {
 	        video.className = className;
 	    }
-	    enableInlineVideo(video, !muted);
 	    return video;
 	}
 
@@ -684,384 +684,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = LivePhoto;
 
 
-/***/ },
+/***/ }),
 /* 2 */
-/***/ function(module, exports, __webpack_require__) {
-
-	/*! npm.im/iphone-inline-video */
-	'use strict';
-
-	function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
-
-	var Symbol = _interopDefault(__webpack_require__(3));
-
-	function Intervalometer(cb) {
-		var rafId;
-		var previousLoopTime;
-		function loop(now) {
-			// must be requested before cb() because that might call .stop()
-			rafId = requestAnimationFrame(loop);
-			cb(now - (previousLoopTime || now)); // ms since last call. 0 on start()
-			previousLoopTime = now;
-		}
-		this.start = function () {
-			if (!rafId) { // prevent double starts
-				loop(0);
-			}
-		};
-		this.stop = function () {
-			cancelAnimationFrame(rafId);
-			rafId = null;
-			previousLoopTime = 0;
-		};
-	}
-
-	function preventEvent(element, eventName, toggleProperty, preventWithProperty) {
-		function handler(e) {
-			if (Boolean(element[toggleProperty]) === Boolean(preventWithProperty)) {
-				e.stopImmediatePropagation();
-				// console.log(eventName, 'prevented on', element);
-			}
-			delete element[toggleProperty];
-		}
-		element.addEventListener(eventName, handler, false);
-
-		// Return handler to allow to disable the prevention. Usage:
-		// const preventionHandler = preventEvent(el, 'click');
-		// el.removeEventHandler('click', preventionHandler);
-		return handler;
-	}
-
-	function proxyProperty(object, propertyName, sourceObject, copyFirst) {
-		function get() {
-			return sourceObject[propertyName];
-		}
-		function set(value) {
-			sourceObject[propertyName] = value;
-		}
-
-		if (copyFirst) {
-			set(object[propertyName]);
-		}
-
-		Object.defineProperty(object, propertyName, {get: get, set: set});
-	}
-
-	function proxyEvent(object, eventName, sourceObject) {
-		sourceObject.addEventListener(eventName, function () { return object.dispatchEvent(new Event(eventName)); });
-	}
-
-	function dispatchEventAsync(element, type) {
-		Promise.resolve().then(function () {
-			element.dispatchEvent(new Event(type));
-		});
-	}
-
-	// iOS 10 adds support for native inline playback + silent autoplay
-	// Also adds unprefixed css-grid. This check essentially excludes
-	var isWhitelisted = /iPhone|iPod/i.test(navigator.userAgent) && document.head.style.grid === undefined;
-
-	var ಠ = Symbol();
-	var ಠevent = Symbol();
-	var ಠplay = Symbol('nativeplay');
-	var ಠpause = Symbol('nativepause');
-
-	/**
-	 * UTILS
-	 */
-
-	function getAudioFromVideo(video) {
-		var audio = new Audio();
-		proxyEvent(video, 'play', audio);
-		proxyEvent(video, 'playing', audio);
-		proxyEvent(video, 'pause', audio);
-		audio.crossOrigin = video.crossOrigin;
-
-		// 'data:' causes audio.networkState > 0
-		// which then allows to keep <audio> in a resumable playing state
-		// i.e. once you set a real src it will keep playing if it was if .play() was called
-		audio.src = video.src || video.currentSrc || 'data:';
-
-		// if (audio.src === 'data:') {
-		//   TODO: wait for video to be selected
-		// }
-		return audio;
-	}
-
-	var lastRequests = [];
-	var requestIndex = 0;
-	var lastTimeupdateEvent;
-
-	function setTime(video, time, rememberOnly) {
-		// allow one timeupdate event every 200+ ms
-		if ((lastTimeupdateEvent || 0) + 200 < Date.now()) {
-			video[ಠevent] = true;
-			lastTimeupdateEvent = Date.now();
-		}
-		if (!rememberOnly) {
-			video.currentTime = time;
-		}
-		lastRequests[++requestIndex % 3] = time * 100 | 0 / 100;
-	}
-
-	function isPlayerEnded(player) {
-		return player.driver.currentTime >= player.video.duration;
-	}
-
-	function update(timeDiff) {
-		var player = this;
-		// console.log('update', player.video.readyState, player.video.networkState, player.driver.readyState, player.driver.networkState, player.driver.paused);
-		if (player.video.readyState >= player.video.HAVE_FUTURE_DATA) {
-			if (!player.hasAudio) {
-				player.driver.currentTime = player.video.currentTime + (timeDiff * player.video.playbackRate) / 1000;
-				if (player.video.loop && isPlayerEnded(player)) {
-					player.driver.currentTime = 0;
-				}
-			}
-			setTime(player.video, player.driver.currentTime);
-		} else if (player.video.networkState === player.video.NETWORK_IDLE && !player.video.buffered.length) {
-			// this should happen when the source is available but:
-			// - it's potentially playing (.paused === false)
-			// - it's not ready to play
-			// - it's not loading
-			// If it hasAudio, that will be loaded in the 'emptied' handler below
-			player.video.load();
-			// console.log('Will load');
-		}
-
-		// console.assert(player.video.currentTime === player.driver.currentTime, 'Video not updating!');
-
-		if (player.video.ended) {
-			delete player.video[ಠevent]; // allow timeupdate event
-			player.video.pause(true);
-		}
-	}
-
-	/**
-	 * METHODS
-	 */
-
-	function play() {
-		// console.log('play');
-		var video = this;
-		var player = video[ಠ];
-
-		// if it's fullscreen, use the native player
-		if (video.webkitDisplayingFullscreen) {
-			video[ಠplay]();
-			return;
-		}
-
-		if (player.driver.src !== 'data:' && player.driver.src !== video.src) {
-			// console.log('src changed on play', video.src);
-			setTime(video, 0, true);
-			player.driver.src = video.src;
-		}
-
-		if (!video.paused) {
-			return;
-		}
-		player.paused = false;
-
-		if (!video.buffered.length) {
-			// .load() causes the emptied event
-			// the alternative is .play()+.pause() but that triggers play/pause events, even worse
-			// possibly the alternative is preventing this event only once
-			video.load();
-		}
-
-		player.driver.play();
-		player.updater.start();
-
-		if (!player.hasAudio) {
-			dispatchEventAsync(video, 'play');
-			if (player.video.readyState >= player.video.HAVE_ENOUGH_DATA) {
-				// console.log('onplay');
-				dispatchEventAsync(video, 'playing');
-			}
-		}
-	}
-	function pause(forceEvents) {
-		// console.log('pause');
-		var video = this;
-		var player = video[ಠ];
-
-		player.driver.pause();
-		player.updater.stop();
-
-		// if it's fullscreen, the developer the native player.pause()
-		// This is at the end of pause() because it also
-		// needs to make sure that the simulation is paused
-		if (video.webkitDisplayingFullscreen) {
-			video[ಠpause]();
-		}
-
-		if (player.paused && !forceEvents) {
-			return;
-		}
-
-		player.paused = true;
-		if (!player.hasAudio) {
-			dispatchEventAsync(video, 'pause');
-		}
-		if (video.ended) {
-			video[ಠevent] = true;
-			dispatchEventAsync(video, 'ended');
-		}
-	}
-
-	/**
-	 * SETUP
-	 */
-
-	function addPlayer(video, hasAudio) {
-		var player = video[ಠ] = {};
-		player.paused = true; // track whether 'pause' events have been fired
-		player.hasAudio = hasAudio;
-		player.video = video;
-		player.updater = new Intervalometer(update.bind(player));
-
-		if (hasAudio) {
-			player.driver = getAudioFromVideo(video);
-		} else {
-			video.addEventListener('canplay', function () {
-				if (!video.paused) {
-					// console.log('oncanplay');
-					dispatchEventAsync(video, 'playing');
-				}
-			});
-			player.driver = {
-				src: video.src || video.currentSrc || 'data:',
-				muted: true,
-				paused: true,
-				pause: function () {
-					player.driver.paused = true;
-				},
-				play: function () {
-					player.driver.paused = false;
-					// media automatically goes to 0 if .play() is called when it's done
-					if (isPlayerEnded(player)) {
-						setTime(video, 0);
-					}
-				},
-				get ended() {
-					return isPlayerEnded(player);
-				}
-			};
-		}
-
-		// .load() causes the emptied event
-		video.addEventListener('emptied', function () {
-			// console.log('driver src is', player.driver.src);
-			var wasEmpty = !player.driver.src || player.driver.src === 'data:';
-			if (player.driver.src && player.driver.src !== video.src) {
-				// console.log('src changed to', video.src);
-				setTime(video, 0, true);
-				player.driver.src = video.src;
-				// playing videos will only keep playing if no src was present when .play()’ed
-				if (wasEmpty) {
-					player.driver.play();
-				} else {
-					player.updater.stop();
-				}
-			}
-		}, false);
-
-		// stop programmatic player when OS takes over
-		video.addEventListener('webkitbeginfullscreen', function () {
-			if (!video.paused) {
-				// make sure that the <audio> and the syncer/updater are stopped
-				video.pause();
-
-				// play video natively
-				video[ಠplay]();
-			} else if (hasAudio && !player.driver.buffered.length) {
-				// if the first play is native,
-				// the <audio> needs to be buffered manually
-				// so when the fullscreen ends, it can be set to the same current time
-				player.driver.load();
-			}
-		});
-		if (hasAudio) {
-			video.addEventListener('webkitendfullscreen', function () {
-				// sync audio to new video position
-				player.driver.currentTime = video.currentTime;
-				// console.assert(player.driver.currentTime === video.currentTime, 'Audio not synced');
-			});
-
-			// allow seeking
-			video.addEventListener('seeking', function () {
-				if (lastRequests.indexOf(video.currentTime * 100 | 0 / 100) < 0) {
-					// console.log('User-requested seeking');
-					player.driver.currentTime = video.currentTime;
-				}
-			});
-		}
-	}
-
-	function overloadAPI(video) {
-		var player = video[ಠ];
-		video[ಠplay] = video.play;
-		video[ಠpause] = video.pause;
-		video.play = play;
-		video.pause = pause;
-		proxyProperty(video, 'paused', player.driver);
-		proxyProperty(video, 'muted', player.driver, true);
-		proxyProperty(video, 'playbackRate', player.driver, true);
-		proxyProperty(video, 'ended', player.driver);
-		proxyProperty(video, 'loop', player.driver, true);
-		preventEvent(video, 'seeking');
-		preventEvent(video, 'seeked');
-		preventEvent(video, 'timeupdate', ಠevent, false);
-		preventEvent(video, 'ended', ಠevent, false); // prevent occasional native ended events
-	}
-
-	function enableInlineVideo(video, hasAudio, onlyWhitelisted) {
-		if ( hasAudio === void 0 ) hasAudio = true;
-		if ( onlyWhitelisted === void 0 ) onlyWhitelisted = true;
-
-		if ((onlyWhitelisted && !isWhitelisted) || video[ಠ]) {
-			return;
-		}
-		addPlayer(video, hasAudio);
-		overloadAPI(video);
-		video.classList.add('IIV');
-		if (!hasAudio && video.autoplay) {
-			video.play();
-		}
-		if (navigator.platform === 'MacIntel' || navigator.platform === 'Windows') {
-			console.warn('iphone-inline-video is not guaranteed to work in emulated environments');
-		}
-	}
-
-	enableInlineVideo.isWhitelisted = isWhitelisted;
-
-	module.exports = enableInlineVideo;
-
-/***/ },
-/* 3 */
-/***/ function(module, exports) {
-
-	'use strict';
-
-	var index = typeof Symbol === 'undefined' ? function (description) {
-		return '@' + (description || '@') + Math.random();
-	} : Symbol;
-
-	module.exports = index;
-
-/***/ },
-/* 4 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ (function(module, exports, __webpack_require__) {
 
 	var refs = 0;
 	var dispose;
-	var content = __webpack_require__(5);
+	var content = __webpack_require__(3);
 	if(typeof content === 'string') content = [[module.id, content, '']];
 	exports.use = exports.ref = function() {
 		if(!(refs++)) {
 			exports.locals = content.locals;
-			dispose = __webpack_require__(7)(content, {});
+			dispose = __webpack_require__(5)(content, {});
 		}
 		return exports;
 	};
@@ -1090,23 +724,23 @@ return /******/ (function(modules) { // webpackBootstrap
 		});
 	}
 
-/***/ },
-/* 5 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ }),
+/* 3 */
+/***/ (function(module, exports, __webpack_require__) {
 
-	exports = module.exports = __webpack_require__(6)();
+	exports = module.exports = __webpack_require__(4)();
 	// imports
 
 
 	// module
-	exports.push([module.id, ".live-photo {\n  position: relative;\n  overflow: hidden;\n  cursor: pointer; }\n  .live-photo video,\n  .live-photo img {\n    display: block;\n    max-width: 100%;\n    pointer-events: none;\n    -ms-touch-action: none;\n        touch-action: none; }\n  .live-photo video {\n    position: absolute;\n    top: 0;\n    right: 0;\n    bottom: 0;\n    left: 0;\n    width: 100%;\n    height: 100%; }\n    .live-photo video::-webkit-media-controls-start-playback-button {\n      display: none; }\n  .live-photo .live-photo-icon {\n    display: block;\n    position: absolute;\n    top: 12px;\n    left: 12px;\n    width: 24px;\n    height: 24px;\n    background: url(\"data:image/svg+xml;charset=utf-8,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg' fill='%23fff'%3E%3Ctitle%3ELive Photo%3C/title%3E%3Cg fill-rule='evenodd'%3E%3Cpath d='M24 36c6.627 0 12-5.373 12-12s-5.373-12-12-12-12 5.373-12 12 5.373 12 12 12zm0-2c5.523 0 10-4.477 10-10s-4.477-10-10-10-10 4.477-10 10 4.477 10 10 10z'/%3E%3Cpath d='M24 29a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.788.63a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.462 1.85a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.831 2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm2.94 3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm1.849 4.462a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm.63 4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-.63 4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-1.85 4.461a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-2.94 3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-3.831 2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.462 1.849a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM24 44a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.788-.63a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.462-1.85a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-3.831-2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-2.94-3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM6.13 30.288a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5.5 25.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm.63-4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm1.85-4.462a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm2.94-3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.831-2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.462-1.849a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z'/%3E%3C/g%3E%3C/svg%3E\") center center;\n    background-size: contain;\n    -webkit-filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));\n            filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));\n    pointer-events: none; }\n  .live-photo .live-photo-postroll,\n  .live-photo .live-photo-video {\n    opacity: 0; }\n  .live-photo .live-photo-video {\n    -webkit-filter: blur(7.5px);\n            filter: blur(7.5px); }\n  .live-photo .live-photo-keyframe,\n  .live-photo .live-photo-postroll,\n  .live-photo .live-photo-video {\n    will-change: transform, filter, opacity;\n    transition: opacity 0.5s linear, -webkit-transform 0.5s ease-out, -webkit-filter 0.5s linear;\n    transition: transform 0.5s ease-out, filter 0.5s linear, opacity 0.5s linear;\n    transition: transform 0.5s ease-out, filter 0.5s linear, opacity 0.5s linear, -webkit-transform 0.5s ease-out, -webkit-filter 0.5s linear; }\n  .live-photo.loading .live-photo-icon {\n    -webkit-animation: live-photo-icon-loading 0.5s linear alternate infinite both;\n            animation: live-photo-icon-loading 0.5s linear alternate infinite both; }\n  .live-photo.preview .live-photo-postroll {\n    opacity: 1;\n    transition-duration: 0s; }\n  .live-photo.active video,\n  .live-photo.active img {\n    -webkit-transform: scale(1.075, 1.075);\n        -ms-transform: scale(1.075, 1.075);\n            transform: scale(1.075, 1.075); }\n  .live-photo.active .live-photo-postroll {\n    -webkit-animation: live-photo-post-roll 1s both;\n            animation: live-photo-post-roll 1s both; }\n  .live-photo.active .live-photo-video {\n    opacity: 1;\n    -webkit-filter: none;\n            filter: none;\n    transition-delay: 0.375s;\n    transition-duration: 0.625s; }\n\n@-webkit-keyframes live-photo-icon-loading {\n  0% {\n    opacity: 1; }\n  100% {\n    opacity: 0.75; } }\n\n@keyframes live-photo-icon-loading {\n  0% {\n    opacity: 1; }\n  100% {\n    opacity: 0.75; } }\n\n@-webkit-keyframes live-photo-post-roll {\n  0% {\n    opacity: 0;\n    -webkit-filter: blur(0);\n            filter: blur(0); }\n  2% {\n    opacity: 1; }\n  37.5% {\n    opacity: 1;\n    -webkit-filter: blur(7.5px);\n            filter: blur(7.5px); }\n  100% {\n    opacity: 0; } }\n\n@keyframes live-photo-post-roll {\n  0% {\n    opacity: 0;\n    -webkit-filter: blur(0);\n            filter: blur(0); }\n  2% {\n    opacity: 1; }\n  37.5% {\n    opacity: 1;\n    -webkit-filter: blur(7.5px);\n            filter: blur(7.5px); }\n  100% {\n    opacity: 0; } }\n", ""]);
+	exports.push([module.id, ".live-photo {\n  position: relative;\n  overflow: hidden;\n  cursor: pointer; }\n  .live-photo video,\n  .live-photo img {\n    display: block;\n    max-width: 100%;\n    pointer-events: none;\n    -ms-touch-action: none;\n        touch-action: none; }\n  .live-photo video {\n    position: absolute;\n    top: 0;\n    right: 0;\n    bottom: 0;\n    left: 0;\n    width: 100%;\n    height: 100%; }\n    .live-photo video::-webkit-media-controls-start-playback-button {\n      display: none; }\n  .live-photo .live-photo-icon {\n    display: block;\n    position: absolute;\n    top: 12px;\n    left: 12px;\n    width: 24px;\n    height: 24px;\n    background: url(\"data:image/svg+xml;charset=utf-8,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg' fill='%23fff'%3E%3Ctitle%3ELive Photo%3C/title%3E%3Cg fill-rule='evenodd'%3E%3Cpath d='M24 36c6.627 0 12-5.373 12-12s-5.373-12-12-12-12 5.373-12 12 5.373 12 12 12zm0-2c5.523 0 10-4.477 10-10s-4.477-10-10-10-10 4.477-10 10 4.477 10 10 10z'/%3E%3Cpath d='M24 29a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0-19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.788.63a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.462 1.85a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.831 2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm2.94 3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm1.849 4.462a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm.63 4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-.63 4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-1.85 4.461a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-2.94 3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-3.831 2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.462 1.849a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM24 44a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.788-.63a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-4.462-1.85a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-3.831-2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-2.94-3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM6.13 30.288a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5.5 25.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm.63-4.788a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm1.85-4.462a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm2.94-3.831a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.831-2.94a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4.462-1.849a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z'/%3E%3C/g%3E%3C/svg%3E\") center center;\n    background-size: contain;\n    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));\n    pointer-events: none; }\n  .live-photo .live-photo-postroll,\n  .live-photo .live-photo-video {\n    opacity: 0; }\n  .live-photo .live-photo-video {\n    filter: blur(7.5px); }\n  .live-photo .live-photo-keyframe,\n  .live-photo .live-photo-postroll,\n  .live-photo .live-photo-video {\n    will-change: transform, filter, opacity;\n    transition: transform 0.5s ease-out, filter 0.5s linear, opacity 0.5s linear; }\n  .live-photo.loading .live-photo-icon {\n    animation: live-photo-icon-loading 0.5s linear alternate infinite both; }\n  .live-photo.preview .live-photo-postroll {\n    opacity: 1;\n    transition-duration: 0s; }\n  .live-photo.active video,\n  .live-photo.active img {\n    -ms-transform: scale(1.075, 1.075);\n        transform: scale(1.075, 1.075); }\n  .live-photo.active .live-photo-postroll {\n    animation: live-photo-post-roll 1s both; }\n  .live-photo.active .live-photo-video {\n    opacity: 1;\n    filter: none;\n    transition-delay: 0.375s;\n    transition-duration: 0.625s; }\n\n@keyframes live-photo-icon-loading {\n  0% {\n    opacity: 1; }\n  100% {\n    opacity: 0.75; } }\n\n@keyframes live-photo-post-roll {\n  0% {\n    opacity: 0;\n    filter: blur(0); }\n  2% {\n    opacity: 1; }\n  37.5% {\n    opacity: 1;\n    filter: blur(7.5px); }\n  100% {\n    opacity: 0; } }\n", ""]);
 
 	// exports
 
 
-/***/ },
-/* 6 */
-/***/ function(module, exports) {
+/***/ }),
+/* 4 */
+/***/ (function(module, exports) {
 
 	/*
 		MIT License http://www.opensource.org/licenses/mit-license.php
@@ -1160,9 +794,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 
-/***/ },
-/* 7 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ }),
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
 
 	/*
 		MIT License http://www.opensource.org/licenses/mit-license.php
@@ -1177,7 +811,7 @@ return /******/ (function(modules) { // webpackBootstrap
 			};
 		},
 		isOldIE = memoize(function() {
-			return /msie [6-9]\b/.test(window.navigator.userAgent.toLowerCase());
+			return /msie [6-9]\b/.test(self.navigator.userAgent.toLowerCase());
 		}),
 		getHeadElement = memoize(function () {
 			return document.head || document.getElementsByTagName("head")[0];
@@ -1412,7 +1046,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 
 
-/***/ }
+/***/ })
 /******/ ])
 });
 ;
